@@ -112,7 +112,7 @@ function CoverageRow({ c, policy, onCorrect }: { c: Coverage; policy: PolicyDeta
         </div>
         <div className="flex gap-2">
           {c.versions.length > 1 && <Button small variant="ghost" onClick={() => setOpen(!open)}>{open ? 'Hide' : 'Show'} date history</Button>}
-          <Button small variant="ghost" onClick={onCorrect}><Icon name="edit_calendar" /> Correct start date</Button>
+          {policy.status === 'active' && <Button small variant="ghost" onClick={onCorrect}><Icon name="edit_calendar" /> Correct start date</Button>}
         </div>
       </div>
       {open && (

@@ -19,6 +19,18 @@ export function Button({ variant = 'primary', small, className = '', ...p }: Btn
   return <button {...p} className={`${base} ${size} ${v} ${className}`} />
 }
 
+/** Light tooltip that matches the app (the browser's native `title` tooltip is dark and unstyled). */
+export function Tip({ text, children }: { text: string; children: ReactNode }) {
+  return (
+    <span className="relative inline-flex group">
+      {children}
+      <span role="tooltip" className="pointer-events-none absolute right-0 top-full z-40 mt-2 w-64 rounded-corgi border border-line bg-white p-2.5 text-[12px] leading-snug text-body shadow-soft opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        {text}
+      </span>
+    </span>
+  )
+}
+
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <div className={`bg-white border border-line rounded-corgi shadow-soft ${className}`}>{children}</div>
 }
@@ -63,9 +75,9 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
     return () => window.removeEventListener('keydown', h)
   }, [onClose])
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-ink/40 p-4 overflow-auto" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 flex overflow-auto bg-ink/40 p-4" onMouseDown={onClose}>
       <div role="dialog" aria-modal aria-label={title} onMouseDown={(e) => e.stopPropagation()}
-        className={`bg-white rounded-corgi shadow-soft w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} mt-[8vh]`}>
+        className={`bg-white rounded-corgi shadow-soft w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} m-auto`}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-line">
           <h3 className="text-[20px]">{title}</h3>
           <button onClick={onClose} aria-label="Close" className="text-muted hover:text-ink cursor-pointer"><Icon name="close" /></button>

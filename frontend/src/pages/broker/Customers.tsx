@@ -20,9 +20,9 @@ export default function Customers() {
   }
   return (
     <>
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between gap-6">
         <PageTitle sub="Each customer gets a portal login to pay and read their statement.">Customers</PageTitle>
-        <Button onClick={() => { setOpen(true); setCreated(null); m.reset() }}><Icon name="add" /> New customer</Button>
+        <div className="mb-5"><Button onClick={() => { setOpen(true); setCreated(null); m.reset() }}><Icon name="add" /> New customer</Button></div>
       </div>
       <Card className="divide-y divide-line">
         {q.data?.map((c) => (
@@ -38,7 +38,7 @@ export default function Customers() {
               <p>Portal login created for <b>{created.customer.name}</b>. Share these sandbox credentials (shown once):</p>
               <div className="rounded-corgi bg-canvas p-3 mono !text-[13px]">{created.login.email}<br />{created.login.temporary_password}</div>
               <p className="text-[12px] text-muted">A production system would send an invite link instead of a temporary password.</p>
-              <Button onClick={() => setOpen(false)}>Done</Button>
+              <div className="flex justify-end"><Button onClick={() => setOpen(false)}>Done</Button></div>
             </div>
           ) : (
             <form onSubmit={submit} className="space-y-4">
@@ -46,7 +46,7 @@ export default function Customers() {
               <Field label="Contact name"><Input name="contact" required /></Field>
               <Field label="Contact email"><Input name="email" type="email" required /></Field>
               <ErrorNote error={m.error} />
-              <Button disabled={m.isPending}>Create customer</Button>
+              <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button disabled={m.isPending}>Create customer</Button></div>
             </form>
           )}
         </Modal>

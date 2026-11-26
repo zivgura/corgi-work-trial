@@ -15,6 +15,7 @@ interface Started { payment: Payment; client_secret: string | null; mode: 'fake'
  *  through the same server-side event handler. */
 export function PayPanel({ policyId, amountDue, hasOpenAttempt, onChanged }: { policyId: number; amountDue: number; hasOpenAttempt: boolean; onChanged: (p?: Payment) => void }) {
   const { setLocked } = usePaymentLock()
+  const { config } = useAuth()
   const [started, setStarted] = useState<Started | null>(null)
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
@@ -40,46 +41,55 @@ export function PayPanel({ policyId, amountDue, hasOpenAttempt, onChanged }: { p
 
   const failed = result?.status === 'failed'
   return (
-    <Card className="p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <Card className="overflow-hidden">
+      <div className="flex items-center gap-3 border-b border-line bg-canvas/60 px-6 py-4">
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-tint text-orange-deep"><Icon name="credit_card" /></span>
         <div>
-          <div className="text-[12px] text-body">Amount due</div>
-          <div className="money text-[28px]">{usd(amountDue)}</div>
+          <h2 className="text-[20px] leading-tight">Pay your premium</h2>
+          <div className="text-[12px] text-muted">{config?.payment_provider === 'stripe' ? 'Card payment · secured by Stripe (test mode)' : 'Card payment · simulated (test mode)'}</div>
         </div>
-        {!started && <Button onClick={start} disabled={busy}>{busy ? 'Starting…' : <><Icon name="credit_card" /> {failed ? 'Try again' : hasOpenAttempt ? 'Continue payment' : 'Pay'} {usd(amountDue)}</>}</Button>}
       </div>
-      <div className="mt-3"><ErrorNote error={error} /></div>
-      {hasOpenAttempt && !started && !failed && (
-        <p className="mt-3 text-[13px] text-body">You started a payment but haven&apos;t finished it. Nothing has been charged yet; continue where you left off.</p>
-      )}
-      {failed && !started && (
-        <div role="alert" className="mt-3 flex items-start gap-2 rounded-corgi border border-danger/30 bg-danger/5 p-3 text-danger">
-          <Icon name="error" />
-          <div className="text-[14px]"><b>Payment failed.</b> {(result?.failure_reason ?? 'Your card was not charged.').replace(/\.$/, '')}. You have not been charged. Try again with another card.</div>
+      <div className="px-6 py-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="text-[12px] text-body">Amount due today</div>
+            <div className="money text-[34px] leading-tight">{usd(amountDue)}</div>
+          </div>
+          {!started && <Button onClick={start} disabled={busy} className="!h-11 !px-6 !text-[15px]">{busy ? 'Starting…' : <><Icon name="lock" className="!text-[18px]" /> {failed ? 'Try again' : hasOpenAttempt ? 'Continue payment' : 'Pay'} {usd(amountDue)}</>}</Button>}
         </div>
-      )}
-      {slow && (
-        <div role="status" className="mt-3 flex items-start gap-2 rounded-corgi border border-orange/30 bg-tint/40 p-3 text-[14px]">
-          <Icon name="hourglass_top" className="text-orange-deep" />
-          <div>Your bank is still confirming this payment. You can safely leave this page; the policy will show <b>Paid</b> as soon as it is confirmed. Please do not pay again.</div>
-        </div>
-      )}
+        <ErrorNote error={error} />
+        {hasOpenAttempt && !started && !failed && (
+          <p className="mt-4 rounded-corgi bg-canvas px-3 py-2.5 text-[13px] text-body">You started a payment but haven&apos;t finished it. Nothing has been charged yet; continue where you left off.</p>
+        )}
+        {failed && !started && (
+          <div role="alert" className="mt-4 flex items-start gap-2 rounded-corgi border border-danger/30 bg-danger/5 p-3 text-danger">
+            <Icon name="error" />
+            <div className="text-[14px]"><b>Payment failed.</b> {(result?.failure_reason ?? 'Your card was not charged.').replace(/\.$/, '')}. You have not been charged. Try again with another card.</div>
+          </div>
+        )}
+        {slow && (
+          <div role="status" className="mt-4 flex items-start gap-2 rounded-corgi border border-orange/30 bg-tint/40 p-3 text-[14px]">
+            <Icon name="hourglass_top" className="text-orange-deep" />
+            <div>Your bank is still confirming this payment. You can safely leave this page; the policy will show <b>Paid</b> as soon as it is confirmed. Please do not pay again.</div>
+          </div>
+        )}
+      </div>
       {started && (
-        <div className="mt-4 border-t border-line pt-4">
-          <div className="flex items-center gap-2 mb-3">
+        <div className="border-t border-line px-6 py-5">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
             <Badge tone="warn">{processing ? 'Processing payment…' : 'Payment pending'}</Badge>
-            <span className="text-[12px] text-muted">{started.mode === 'stripe' ? 'Stripe test mode' : 'Simulated test payment — no real network call'}</span>
+            <span className="text-[12px] text-muted">{started.mode === 'stripe' ? 'Stripe test mode: use a test card, no real money moves.' : 'Simulated test payment, no network call.'}</span>
           </div>
           {started.mode === 'fake'
-            ? <SimulatedCard payment={started.payment} onDone={finished} onProcessing={setProcessing} />
-            : <StripeCard started={started} onDone={finished} onProcessing={setProcessing} onSlow={() => setSlow(true)} />}
+            ? <SimulatedCard payment={started.payment} amount={amountDue} onDone={finished} onProcessing={setProcessing} />
+            : <StripeCard started={started} amount={amountDue} onDone={finished} onProcessing={setProcessing} onSlow={() => setSlow(true)} />}
         </div>
       )}
     </Card>
   )
 }
 
-function SimulatedCard({ payment, onDone, onProcessing }: { payment: Payment; onDone: (p: Payment) => void; onProcessing: (v: boolean) => void }) {
+function SimulatedCard({ payment, amount, onDone, onProcessing }: { payment: Payment; amount: number; onDone: (p: Payment) => void; onProcessing: (v: boolean) => void }) {
   const [card, setCard] = useState<'succeed' | 'decline'>('succeed')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
@@ -100,23 +110,23 @@ function SimulatedCard({ payment, onDone, onProcessing }: { payment: Payment; on
       {opt('succeed', '4242 4242 4242 4242', 'Succeeds')}
       {opt('decline', '4000 0000 0000 0002', 'Declined')}
       <ErrorNote error={error} />
-      <Button onClick={submit} disabled={busy}>{busy ? 'Processing…' : 'Submit payment'}</Button>
+      <Button onClick={submit} disabled={busy} className="w-full !h-11">{busy ? 'Processing…' : `Submit payment of ${usd(amount)}`}</Button>
     </div>
   )
 }
 
 let stripePromise: Promise<Stripe | null> | null = null
-function StripeCard({ started, onDone, onProcessing, onSlow }: { started: Started; onDone: (p: Payment) => void; onProcessing: (v: boolean) => void; onSlow: () => void }) {
+function StripeCard({ started, amount, onDone, onProcessing, onSlow }: { started: Started; amount: number; onDone: (p: Payment) => void; onProcessing: (v: boolean) => void; onSlow: () => void }) {
   const { config } = useAuth()
   if (!stripePromise) stripePromise = loadStripe(config?.stripe_publishable_key ?? '')
   return (
     <Elements stripe={stripePromise} options={{ clientSecret: started.client_secret ?? '' }}>
-      <StripeForm started={started} onDone={onDone} onProcessing={onProcessing} onSlow={onSlow} />
+      <StripeForm started={started} amount={amount} onDone={onDone} onProcessing={onProcessing} onSlow={onSlow} />
     </Elements>
   )
 }
 
-function StripeForm({ started, onDone, onProcessing, onSlow }: { started: Started; onDone: (p: Payment) => void; onProcessing: (v: boolean) => void; onSlow: () => void }) {
+function StripeForm({ started, amount, onDone, onProcessing, onSlow }: { started: Started; amount: number; onDone: (p: Payment) => void; onProcessing: (v: boolean) => void; onSlow: () => void }) {
   const stripe = useStripe(); const elements = useElements()
   const toast = useToast()
   const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null)
@@ -147,8 +157,8 @@ function StripeForm({ started, onDone, onProcessing, onSlow }: { started: Starte
       <PaymentElement options={{ readOnly: busy }} onChange={(e) => { setComplete(e.complete); if (e.complete) setError(null) }}
         onLoadError={(e) => toast.error(e.error?.message ?? 'The card form could not be loaded.')} />
       {error && <div role="alert" className="flex items-start gap-2 text-danger text-[13px]"><Icon name="error" className="!text-[18px]" />{error}</div>}
-      <Button onClick={submit} disabled={busy || !stripe || !complete}>{busy ? 'Processing…' : 'Pay'}</Button>
-      {!complete && !busy && <p className="text-[12px] text-muted">Enter valid card details to enable payment.</p>}
+      <Button onClick={submit} disabled={busy || !stripe || !complete} className="w-full !h-11 !text-[15px]">{busy ? 'Processing…' : <><Icon name="lock" className="!text-[18px]" /> Pay {usd(amount)}</>}</Button>
+      <p className="text-center text-[12px] text-muted">{complete || busy ? 'Card details are sent straight to Stripe and never touch our servers.' : 'Enter valid card details to enable payment.'}</p>
     </div>
   )
 }

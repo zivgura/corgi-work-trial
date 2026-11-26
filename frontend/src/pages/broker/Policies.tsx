@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api, type Customer, type PolicyRow } from '../../lib/api'
 import { useAuth } from '../../auth'
 import { fdate, usd } from '../../lib/format'
-import { Button, Card, Icon, PageTitle, PaymentBadge, PolicyStatus } from '../../components/ui'
+import { Button, Card, Icon, PageTitle, PaymentBadge, PolicyStatus, Tip } from '../../components/ui'
 
 export default function Policies() {
   const { config } = useAuth(); const qc = useQueryClient(); const nav = useNavigate()
@@ -15,11 +15,11 @@ export default function Policies() {
   })
   return (
     <>
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between gap-6">
         <PageTitle sub="Everything you've issued. Open a policy to change, correct or cancel it.">Policies</PageTitle>
-        <div className="flex gap-2">
+        <div className="flex gap-3 mb-5">
           {config?.payment_provider === 'fake' && customers.data?.length ? (
-            <Button variant="ghost" onClick={() => demo.mutate()} disabled={demo.isPending} title="Creates a policy whose premium and mid-term coverage change are already paid (simulated payments)"><Icon name="science" /> Load demo scenario</Button>
+            <Tip text="Creates a policy whose premium and mid-term coverage change are already paid (simulated payments)."><Button variant="ghost" onClick={() => demo.mutate()} disabled={demo.isPending}><Icon name="science" /> Load demo scenario</Button></Tip>
           ) : null}
           <Link to="/broker/new"><Button><Icon name="add" /> Issue policy</Button></Link>
         </div>

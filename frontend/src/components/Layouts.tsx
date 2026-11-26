@@ -1,4 +1,4 @@
-import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { Badge, Icon } from './ui'
 import { Lockable, PaymentLockProvider } from './PaymentLock'
@@ -28,13 +28,14 @@ const navCls = ({ isActive }: { isActive: boolean }) =>
 
 function BrokerLayout() {
   const { user, logout } = useAuth(); const nav = useNavigate()
+  const onPolicy = useLocation().pathname.startsWith('/broker/policies/')
   return (
     <div className="min-h-full flex">
       <aside className="w-60 shrink-0 bg-ink text-white flex flex-col p-4 sticky top-0 h-screen">
         <div className="flex items-center gap-1.5 text-orange font-semibold text-[20px] px-2 mb-1"><Icon name="pets" className="!text-[24px]" /> corgi</div>
         <div className="text-[12px] text-[#9a9a9a] px-2 mb-6">Broker console</div>
         <nav className="space-y-1">
-          <NavLink to="/broker" end className={navCls}><Icon name="description" /> Policies</NavLink>
+          <NavLink to="/broker" end className={({ isActive }) => navCls({ isActive: isActive || onPolicy })}><Icon name="description" /> Policies</NavLink>
           <NavLink to="/broker/new" className={navCls}><Icon name="add_circle" /> Issue policy</NavLink>
           <NavLink to="/broker/customers" className={navCls}><Icon name="groups" /> Customers</NavLink>
           <NavLink to="/broker/integrations" className={navCls}><Icon name="hub" /> Integrations</NavLink>

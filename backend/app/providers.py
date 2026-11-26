@@ -87,7 +87,7 @@ class StripeProvider:
                 currency="usd",
                 description=description,
                 metadata=metadata,
-                automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
+                payment_method_types=["card"],
             )
         except self._stripe.StripeError as exc:  # pragma: no cover - network
             raise ProviderError(str(exc)) from exc
