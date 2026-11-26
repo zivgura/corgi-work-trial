@@ -391,3 +391,26 @@ def test_emails_carry_a_branded_html_version(db, customer):
     # untrusted text is escaped
     out = render_email_html("payment_failed", "x", "<script>alert(1)</script>", "http://x")
     assert "<script>" not in out and "&lt;script&gt;" in out
+
+
+def test_sandbox_redirect_delivers_elsewhere_but_logs_the_real_recipient(db, customer, monkeypatch):
+    from app.config import get_settings
+    from app.models import EmailLog
+    from app.providers import EmailResult, set_email_provider
+
+    sent: list[dict] = []
+
+    class Capture:
+        name = "capture"
+
+        def send(self, to, subject, body, html=None):
+            sent.append({"to": to, "subject": subject, "body": body, "html": html})
+            return EmailResult(status="sent", provider_id="x")
+
+    set_email_provider(Capture())
+    monkeypatch.setattr(get_settings(), "email_redirect_to", "owner@demo.test")
+    issue(db, customer)
+    assert sent[0]["to"] == "owner@demo.test"
+    assert customer.email in sent[0]["subject"] and customer.email in sent[0]["html"]
+    log = db.scalars(select(EmailLog)).first()
+    assert log.to == customer.email and not log.subject.startswith("[to ")

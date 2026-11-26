@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     email_provider: str = "fake"
     resend_api_key: str = ""
     email_from: str = "Corgi Demo <onboarding@resend.dev>"
+    # Resend's sandbox sender only delivers to the account owner. When set, every email is
+    # delivered here instead, labelled with the real recipient (the log keeps the real one).
+    email_redirect_to: str = ""
 
     # where the "Open your portal" button in emails points
     app_url: str = "http://localhost:5173"

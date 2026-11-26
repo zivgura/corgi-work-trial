@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from . import pricing
 from .config import get_settings
-from .email_html import render_email_html
+from .email_html import html_with_note, render_email_html
 from .models import (
     Action,
     Coverage,
@@ -238,7 +238,18 @@ def notify(db: Session, policy: Policy | None, to: str, template: str, subject: 
     portal = get_settings().app_url.rstrip("/") + (
         f"/portal/policies/{policy.id}" if policy else "/portal"
     )
-    res = prov.send(to, subject, body, render_email_html(template, subject, body, portal))
+    html = render_email_html(template, subject, body, portal)
+    redirect = get_settings().email_redirect_to.strip()
+    if redirect and redirect.lower() != to.lower():
+        note = (
+            f"Demo sandbox: this email is addressed to {to}. Resend's test sender can only "
+            "deliver to the account owner, so it was redirected here."
+        )
+        res = prov.send(
+            redirect, f"[to {to}] {subject}", f"{note}\n\n{body}", html_with_note(html, note)
+        )
+    else:
+        res = prov.send(to, subject, body, html)
     db.add(
         EmailLog(
             policy_id=policy.id if policy else None,

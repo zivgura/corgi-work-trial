@@ -26,6 +26,8 @@ services:
         value: resend        # set to "fake" to log only
       - key: RESEND_API_KEY
         sync: false
+      - key: EMAIL_REDIRECT_TO
+        sync: false          # Resend sandbox only delivers to the account owner's address
 databases:
   - name: corgi-db
     plan: free               # free Postgres expires after 30 days; fine for a work trial

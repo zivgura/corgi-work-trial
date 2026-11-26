@@ -73,3 +73,13 @@ def render_email_html(template: str, subject: str, body: str, portal_url: str) -
   </table>
 </td></tr></table>
 </body></html>"""
+
+
+def html_with_note(html: str, note: str) -> str:
+    """Insert a small demo banner above the card (used when an email is redirected)."""
+    banner = (
+        f'<tr><td style="padding:0 4px 12px;font-size:12px;line-height:1.5;color:#cc4a00;">'
+        f"{escape(note)}</td></tr>"
+    )
+    marker = '<tr><td style="background:#ffffff;'
+    return html.replace(marker, banner + marker, 1)
