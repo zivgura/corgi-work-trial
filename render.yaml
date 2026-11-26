@@ -3,7 +3,7 @@ services:
   - type: web
     name: corgi-policy-admin
     runtime: docker
-    plan: starter            # free plans sleep and would miss Stripe webhooks
+    plan: free               # sleeps when idle; a missed Stripe webhook is reconciled on the next page load
     healthCheckPath: /healthz
     envVars:
       - key: DATABASE_URL
@@ -11,6 +11,8 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGINS
+        value: https://corgi-policy-admin.onrender.com
+      - key: APP_URL
         value: https://corgi-policy-admin.onrender.com
       - key: PAYMENT_PROVIDER
         value: stripe        # set to "fake" to run fully simulated
@@ -26,4 +28,4 @@ services:
         sync: false
 databases:
   - name: corgi-db
-    plan: basic-256mb
+    plan: free               # free Postgres expires after 30 days; fine for a work trial
