@@ -1,0 +1,66 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend: API (debug, :8000)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.main:app", "--reload", "--port", "8000"],
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/bin/python",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "justMyCode": true
+    },
+    {
+      "name": "Backend: tests (pytest)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["-q"],
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/bin/python",
+      "justMyCode": false
+    },
+    {
+      "name": "Frontend: Vite dev (:5173)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev",
+      "cwd": "${workspaceFolder}/frontend"
+    },
+    {
+      "name": "Stripe: forward webhooks to :8000",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": ".tools/stripe listen --api-key \"$(grep '^STRIPE_SECRET_KEY=' backend/.env | cut -d= -f2)\" --forward-to localhost:8000/api/webhooks/stripe",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "E2E: Playwright scenario",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npx playwright test",
+      "cwd": "${workspaceFolder}/e2e"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full stack (Backend + Frontend + Stripe)",
+      "configurations": [
+        "Backend: API (debug, :8000)",
+        "Frontend: Vite dev (:5173)",
+        "Stripe: forward webhooks to :8000"
+      ],
+      "stopAll": true
+    },
+    {
+      "name": "Full stack, simulated payments (Backend + Frontend)",
+      "configurations": [
+        "Backend: API (debug, :8000)",
+        "Frontend: Vite dev (:5173)"
+      ],
+      "stopAll": true
+    }
+  ]
+}

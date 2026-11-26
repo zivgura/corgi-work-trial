@@ -6,7 +6,7 @@ import { useAuth } from '../../auth'
 import { fdate, fdatetime, today, usd } from '../../lib/format'
 import { Statement } from '../../components/Statement'
 import { Timeline } from '../../components/Timeline'
-import { Badge, Button, Card, ErrorNote, Field, Icon, Input, Modal, PaymentBadge, PolicyStatus, Select } from '../../components/ui'
+import { Badge, Button, Card, ErrorNote, LoadError, Field, Icon, Input, Modal, PaymentBadge, PolicyStatus, Select } from '../../components/ui'
 
 function usePolicyData(id: string) {
   const qc = useQueryClient()
@@ -22,7 +22,7 @@ function usePreview(id: string, body: Record<string, unknown> | null) {
 }
 
 function PreviewBox({ q, kind }: { q: ReturnType<typeof usePreview>; kind: 'premium' | 'cancel' }) {
-  if (q.isError) return <ErrorNote error={q.error} />
+  if (q.isError) return <LoadError error={q.error} />
   if (!q.data) return <div className="rounded-corgi bg-canvas p-3 text-muted text-[13px]">Fill in the details to see the amount before you confirm.</div>
   const p = q.data; const changed = p.lines.filter((l) => l.delta_cents !== 0)
   const after = p.new_balance_cents
@@ -52,7 +52,7 @@ export default function PolicyPage() {
   const [tab, setTab] = useState<'statement' | 'timeline'>('statement')
   const p = detail.data
   if (detail.isLoading) return <div className="text-muted">Loading…</div>
-  if (!p) return <ErrorNote error={detail.error} />
+  if (!p) return <LoadError error={detail.error} />
   const bal = p.balance_cents
   return (
     <>

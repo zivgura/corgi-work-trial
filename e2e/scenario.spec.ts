@@ -12,7 +12,7 @@ async function signIn(page: Page, email: string, password: string) {
 async function signOut(page: Page) { await page.getByRole('button', { name: 'Sign out' }).click(); await expect(page).toHaveURL(/login/) }
 
 async function pay(page: Page, card: 'succeed' | 'decline') {
-  await page.getByRole('button', { name: /^Pay \$/ }).click()
+  await page.getByRole('button', { name: /^(Pay|Try again) \$/ }).click()
   await expect(page.getByText('Payment pending').first()).toBeVisible()
   await page.getByRole('radio').nth(card === 'succeed' ? 0 : 1).check()
   await page.getByRole('button', { name: 'Submit payment' }).click()
@@ -49,10 +49,10 @@ test('headline scenario: issue → pay → add coverage → pay → correct date
   await signIn(page, 'gil@globex-robotics.test', tempPassword)
   await page.getByText('CRG-').first().click()
   await pay(page, 'decline')
-  await expect(page.getByText(/Payment failed: .*declined/)).toBeVisible()
+  await expect(page.getByText(/Payment failed\./)).toBeVisible()
+  await expect(page.getByText(/You have not been charged/)).toBeVisible()
   await shot(page, '04-payment-failed')
-  await page.getByRole('radio').nth(0).check() // retry with the approved test card
-  await page.getByRole('button', { name: 'Submit payment' }).click()
+  await pay(page, 'succeed') // "Try again" starts a fresh attempt with the approved test card
   await expect(page.getByText(/successful. Thank you/)).toBeVisible()
   await shot(page, '05-payment-succeeded')
   await signOut(page)

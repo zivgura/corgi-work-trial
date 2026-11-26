@@ -72,6 +72,132 @@ def test_payment_states_pending_success_failed(db, customer):
     assert svc.balance(db, p.id) == 0
 
 
+def test_reused_payment_attempt_gets_its_client_secret_again(db, customer):
+    """Regression: the Stripe client secret is never stored. A reused pending attempt used to come
+    back without one, so the customer's browser could not render the card form and got stuck."""
+    from app.providers import FakeProvider, set_payment_provider
+
+    class SecretProvider(FakeProvider):
+        name = "fake"
+
+        def client_secret_for(self, payment_ref):
+            return f"{payment_ref}_secret_xyz"
+
+    set_payment_provider(SecretProvider())
+    p = issue(db, customer)
+    first = svc.create_payment(db, BROKER, p)
+    again = svc.create_payment(db, BROKER, p)
+    assert again.id == first.id
+    assert again.client_secret == f"{first.provider_ref}_secret_xyz"
+
+
+def test_pending_attempt_from_another_provider_mode_is_not_reused(db, customer):
+    p = issue(db, customer)
+    old = svc.create_payment(db, BROKER, p)
+    old.provider = "stripe"  # pretend it was created while the app ran in Stripe mode
+    db.commit()
+    fresh = svc.create_payment(db, BROKER, p)  # provider is now the simulated one
+    assert fresh.id != old.id and db.get(Payment, old.id).status == "canceled"
+
+
+class _ProviderSays:
+    """Stand-in for Stripe whose answer to "what happened to this payment?" we control."""
+
+    def __init__(self, state, reason=None):
+        from app.providers import FakeProvider, PaymentState
+
+        self._fake = FakeProvider()
+        self.name = "fake"
+        self._state = PaymentState(state, reason)
+
+    def __getattr__(self, item):
+        return getattr(self._fake, item)
+
+    def payment_state(self, ref):
+        return self._state
+
+
+def test_lost_webhook_is_reconciled_and_a_late_webhook_does_not_double_book(db, customer):
+    """Stripe took the money but our webhook never arrived. Asking the provider books it once."""
+    from app.providers import set_payment_provider
+
+    p = issue(db, customer)
+    pay = svc.create_payment(db, BROKER, p)
+    db.commit()
+    set_payment_provider(_ProviderSays("succeeded"))
+    assert svc.sync_pending_payments(db, p) is True
+    assert db.get(Payment, pay.id).status == "succeeded"
+    assert svc.balance(db, p.id) == 0
+    # the real webhook shows up afterwards: nothing changes
+    out = svc.apply_provider_event(
+        db, ProviderEvent("evt_late", "payment_succeeded", pay.provider_ref, provider="fake")
+    )
+    assert out == "duplicate" and svc.balance(db, p.id) == 0
+    assert svc.sync_pending_payments(db, p) is False  # idempotent
+    payments = [e for e in db.scalars(select(LedgerEntry)) if e.type == "PAYMENT"]
+    assert len(payments) == 1
+
+
+def test_concurrent_webhook_and_reconciliation_book_a_payment_only_once(db, customer):
+    """Regression: a signed webhook and a polled reconciliation handled the same Stripe payment
+    in parallel (each read 'pending') and booked it twice. The second one must lose."""
+    from sqlalchemy.orm import sessionmaker
+
+    p = issue(db, customer)
+    pay = svc.create_payment(db, BROKER, p)
+    db.commit()
+    other = sessionmaker(bind=db.get_bind(), autoflush=False, expire_on_commit=False)()
+    stale = other.scalar(select(Payment).where(Payment.id == pay.id))
+    assert stale is not None and stale.status == "pending"  # the other request's stale view
+    first = svc.apply_provider_event(
+        db, ProviderEvent("evt_web", "payment_succeeded", pay.provider_ref, provider="fake")
+    )
+    db.commit()
+    second = svc.apply_provider_event(
+        other,
+        ProviderEvent("sync_x_succeeded", "payment_succeeded", pay.provider_ref, provider="fake"),
+    )
+    other.commit()
+    other.close()
+    assert (first, second) == ("applied", "duplicate")
+    entries = [e for e in db.scalars(select(LedgerEntry)) if e.type == "PAYMENT"]
+    assert len(entries) == 1 and svc.balance(db, p.id) == 0
+    from app.models import EmailLog
+
+    mails = [m for m in db.scalars(select(EmailLog)) if m.template == "payment_received"]
+    assert len(mails) == 1
+
+
+def test_paid_policy_is_not_offered_a_second_payment(db, customer):
+    from app.providers import set_payment_provider
+
+    p = issue(db, customer)
+    svc.create_payment(db, BROKER, p)
+    db.commit()
+    set_payment_provider(_ProviderSays("succeeded"))
+    with pytest.raises(DomainError, match="Nothing is due"):
+        svc.create_payment(db, BROKER, p)
+
+
+def test_reconciliation_handles_failed_and_canceled_attempts(db, customer):
+    from app.providers import set_payment_provider
+
+    p = issue(db, customer)
+    a = svc.create_payment(db, BROKER, p)
+    db.commit()
+    set_payment_provider(_ProviderSays("failed", "Your card was declined."))
+    svc.sync_pending_payments(db, p)
+    assert db.get(Payment, a.id).status == "failed"
+    assert db.get(Payment, a.id).failure_reason == "Your card was declined."
+    assert svc.balance(db, p.id) == 240_000  # still owed
+
+    set_payment_provider(_ProviderSays("canceled"))
+    b = svc.create_payment(db, BROKER, p)  # a new attempt, since the failed one is over
+    set_payment_provider(_ProviderSays("canceled"))
+    svc.sync_pending_payments(db, p)
+    assert db.get(Payment, b.id).status == "canceled"
+
+
 def test_webhook_is_idempotent(db, customer):
     p = issue(db, customer)
     pay = svc.create_payment(db, BROKER, p)

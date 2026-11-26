@@ -66,7 +66,9 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     body: init.body ? JSON.stringify(init.body) : undefined,
   })
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let data: any = null
+  try { data = text ? JSON.parse(text) : null } catch { /* non-JSON body, e.g. a proxy's plain-text 502 */ }
   if (!res.ok) {
     const detail = data?.detail
     const msg = typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map((d: { loc?: string[]; msg: string }) => `${d.loc?.slice(-1)[0] ?? ''} ${d.msg}`).join('; ') : res.statusText

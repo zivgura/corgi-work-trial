@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
 import { useEffect } from 'react'
+import { useToast } from './Toast'
 
 export function Icon({ name, className = '' }: { name: string; className?: string }) {
   return <span className={`msr ${className}`} aria-hidden>{name}</span>
@@ -75,10 +76,23 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
   )
 }
 
+/** Errors are surfaced as toasts, never inside the component that triggered them. Renders nothing. */
 export function ErrorNote({ error }: { error: unknown }) {
-  if (!error) return null
-  const msg = error instanceof Error ? error.message : String(error)
-  return <div role="alert" className="rounded-corgi bg-danger/10 text-danger px-3 py-2 text-[13px]">{msg}</div>
+  const toast = useToast()
+  useEffect(() => { if (error) toast.error(error) }, [error, toast])
+  return null
+}
+
+/** A page whose data could not be loaded: toast the reason, show a calm placeholder with a retry. */
+export function LoadError({ error }: { error: unknown }) {
+  return (
+    <div className="mt-16 flex flex-col items-center gap-3 text-center">
+      <ErrorNote error={error} />
+      <span className="msr !text-[36px] text-muted" aria-hidden>cloud_off</span>
+      <div className="text-[18px] font-medium">We couldn&apos;t load this page</div>
+      <Button variant="ghost" onClick={() => window.location.reload()}>Try again</Button>
+    </div>
+  )
 }
 
 export function PageTitle({ children, sub }: { children: ReactNode; sub?: ReactNode }) {

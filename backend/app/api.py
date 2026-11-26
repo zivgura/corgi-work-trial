@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import date
 from typing import Annotated
@@ -53,6 +54,14 @@ def get_policy(db: Session, user: User, policy_id: int) -> Policy:
     p = db.get(Policy, policy_id)
     if not p or (user.role == "customer" and p.customer_id != user.customer_id):
         raise HTTPException(404, "Policy not found")
+    return p
+
+
+def get_policy_synced(db: Session, user: User, policy_id: int) -> Policy:
+    """Like get_policy, but first reconciles any open payment attempt with the provider."""
+    p = get_policy(db, user, policy_id)
+    if svc.sync_pending_payments(db, p):
+        db.commit()
     return p
 
 
@@ -197,14 +206,14 @@ def issue_policy(body: IssueIn, user: User = Depends(broker_only), db: Session =
 def get_policy_detail(
     policy_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)
 ):
-    return svc.policy_detail(db, get_policy(db, user, policy_id))
+    return svc.policy_detail(db, get_policy_synced(db, user, policy_id))
 
 
 @router.get("/policies/{policy_id}/statement")
 def get_statement(
     policy_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)
 ):
-    return svc.statement(db, get_policy(db, user, policy_id))
+    return svc.statement(db, get_policy_synced(db, user, policy_id))
 
 
 @router.get("/policies/{policy_id}/timeline")
@@ -346,7 +355,7 @@ def start_payment(
 def list_payments(
     policy_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)
 ):
-    p = get_policy(db, user, policy_id)
+    p = get_policy_synced(db, user, policy_id)
     return [
         _payment(x)
         for x in db.scalars(
@@ -410,28 +419,31 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     s = get_settings()
     payload = await request.body()
     try:
-        event = stripe.Webhook.construct_event(
+        # Verifies the signature (and timestamp) against the raw body; raises if it does not match.
+        stripe.Webhook.construct_event(
             payload, request.headers.get("stripe-signature", ""), s.stripe_webhook_secret
         )
     except Exception as exc:
         raise HTTPException(400, f"Invalid webhook: {exc}") from None
+    # Newer stripe-python event objects are not dicts, so read the verified body as plain JSON.
+    event = json.loads(payload)
     obj = event["data"]["object"]
     t = event["type"]
     ev = None
     if t == "payment_intent.succeeded":
         ev = svc.ProviderEvent(
-            event["id"], "payment_succeeded", obj["id"], provider="stripe", raw=dict(event)
+            event["id"], "payment_succeeded", obj["id"], provider="stripe", raw=event
         )
     elif t == "payment_intent.payment_failed":
         msg = (obj.get("last_payment_error") or {}).get("message", "Payment failed")
-        ev = svc.ProviderEvent(event["id"], "payment_failed", obj["id"], msg, "stripe", dict(event))
+        ev = svc.ProviderEvent(event["id"], "payment_failed", obj["id"], msg, "stripe", event)
     elif t in ("charge.refunded", "refund.created", "refund.updated"):
         ev = svc.ProviderEvent(
             event["id"],
             "refund_succeeded",
             obj.get("payment_intent") or obj["id"],
             provider="stripe",
-            raw=dict(event),
+            raw=event,
         )
     if ev is None:
         return {"received": True, "handled": False}

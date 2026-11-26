@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from . import pricing
@@ -542,18 +542,71 @@ def cancel_policy(
 # ---- payments & refunds -------------------------------------------------------------------
 
 
+def sync_pending_payments(db: Session, policy: Policy) -> bool:
+    """Reconcile open payment attempts with the provider. The signed webhook is the normal path; this
+    is the safety net for a webhook that is late, lost or rejected, so a paid policy never looks unpaid
+    and a customer is never offered the same payment twice. Goes through the same idempotent handler,
+    so a webhook arriving afterwards changes nothing."""
+    provider = get_payment_provider()
+    changed = False
+    pending = db.scalars(
+        select(Payment).where(
+            Payment.policy_id == policy.id,
+            Payment.status == "pending",
+            Payment.provider == provider.name,
+        )
+    ).all()
+    for p in pending:
+        try:
+            st = provider.payment_state(p.provider_ref)
+        except ProviderError:
+            continue  # best effort: the webhook remains the source of truth
+        if st.state == "succeeded":
+            ev = ProviderEvent(
+                f"sync_{p.provider_ref}_succeeded",
+                "payment_succeeded",
+                p.provider_ref,
+                provider=provider.name,
+                raw={"ref": p.provider_ref, "source": "reconciliation"},
+            )
+            changed |= apply_provider_event(db, ev) == "applied"
+        elif st.state == "failed":
+            ev = ProviderEvent(
+                f"sync_{p.provider_ref}_failed",
+                "payment_failed",
+                p.provider_ref,
+                st.failure_reason,
+                provider=provider.name,
+                raw={"ref": p.provider_ref, "source": "reconciliation"},
+            )
+            changed |= apply_provider_event(db, ev) == "applied"
+        elif st.state == "canceled":
+            p.status = "canceled"
+            changed = True
+    return changed
+
+
 def create_payment(db: Session, actor: Actor, policy: Policy) -> Payment:
+    sync_pending_payments(
+        db, policy
+    )  # a payment that already went through must not be offered again
     due = balance(db, policy.id)
     if due <= 0:
         raise DomainError("Nothing is due on this policy")
     pending = db.scalars(
         select(Payment).where(Payment.policy_id == policy.id, Payment.status == "pending")
     ).all()
-    for p in pending:
-        if p.amount_cents == due:
-            return p  # idempotent: reuse the open attempt
-        p.status = "canceled"  # amount changed since it was created
     provider = get_payment_provider()
+    for p in pending:
+        if p.amount_cents == due and p.provider == provider.name:
+            # Idempotent: reuse the open attempt. The client secret is never stored, so fetch it
+            # again; without it the customer's browser cannot render the card form.
+            try:
+                p.client_secret = provider.client_secret_for(p.provider_ref)  # type: ignore[attr-defined]
+            except ProviderError as exc:
+                raise DomainError(f"Payment provider error: {exc}", 502) from exc
+            return p
+        p.status = "canceled"  # amount changed, or created under a different provider mode
     try:
         res = provider.create_payment(
             due,
@@ -594,6 +647,23 @@ class ProviderEvent:
     raw: dict[str, Any] | None = None
 
 
+def _claim_payment(
+    db: Session, pay: Payment, *, to: str, unless: tuple[str, ...], reason: str | None = None
+) -> bool:
+    """Move a payment to `to` only if it is not already in a state listed in `unless`.
+    One SQL statement, so exactly one concurrent caller gets True."""
+    res = db.execute(
+        update(Payment)
+        .where(Payment.id == pay.id, Payment.status.notin_(unless))
+        .values(status=to, failure_reason=reason)
+        .execution_options(synchronize_session=False)
+    )
+    if res.rowcount != 1:  # type: ignore[attr-defined]
+        return False
+    db.refresh(pay)
+    return True
+
+
 def apply_provider_event(db: Session, ev: ProviderEvent) -> str:
     """Single entry point for Stripe webhooks AND simulated confirmations. Idempotent."""
     if db.get(WebhookEvent, ev.id):
@@ -612,10 +682,11 @@ def apply_provider_event(db: Session, ev: ProviderEvent) -> str:
     policy = db.get(Policy, pay.policy_id)
     assert policy is not None
     if ev.type == "payment_succeeded":
-        if pay.status == "succeeded":
+        # Atomic compare-and-set: the webhook request and a polled reconciliation can run in
+        # different threads/transactions and both read "pending". Only the caller whose UPDATE
+        # actually changes the row may book the ledger entry and send the email.
+        if not _claim_payment(db, pay, to="succeeded", unless=("succeeded",)):
             return "duplicate"
-        pay.status = "succeeded"
-        pay.failure_reason = None
         action = _action(
             db,
             policy,
@@ -647,8 +718,14 @@ def apply_provider_event(db: Session, ev: ProviderEvent) -> str:
     if ev.type == "payment_failed":
         if pay.status == "succeeded":
             return "ignored"
-        pay.status = "failed"
-        pay.failure_reason = ev.failure_reason or "Payment failed"
+        if not _claim_payment(
+            db,
+            pay,
+            to="failed",
+            unless=("succeeded", "failed"),
+            reason=ev.failure_reason or "Payment failed",
+        ):
+            return "duplicate"
         _action(
             db,
             policy,

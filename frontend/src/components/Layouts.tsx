@@ -1,6 +1,7 @@
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { Badge, Icon } from './ui'
+import { Lockable, PaymentLockProvider } from './PaymentLock'
 import type { Role } from '../lib/api'
 
 export function Guard({ role }: { role: Role }) {
@@ -52,16 +53,20 @@ function BrokerLayout() {
 }
 
 function PortalLayout() {
+  return <PaymentLockProvider><PortalShell /></PaymentLockProvider>
+}
+
+function PortalShell() {
   const { user, logout } = useAuth(); const nav = useNavigate()
   return (
     <div className="min-h-full">
-      <header className="bg-white border-b border-line">
+      <Lockable as="header" className="bg-white border-b border-line">
         <div className="max-w-5xl mx-auto flex items-center justify-between px-5 h-14">
           <NavLink to="/portal" className="flex items-center gap-1.5 text-orange font-semibold text-[20px]"><Icon name="pets" className="!text-[24px]" /> corgi</NavLink>
           <div className="flex items-center gap-4"><Mode /><span className="text-body text-[13px]">{user?.name}</span>
             <button onClick={() => { logout(); nav('/login') }} className="text-[13px] text-muted hover:text-ink cursor-pointer">Sign out</button></div>
         </div>
-      </header>
+      </Lockable>
       <main className="max-w-5xl mx-auto px-5 py-8"><Outlet /></main>
     </div>
   )

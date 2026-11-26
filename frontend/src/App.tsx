@@ -1,6 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './auth'
+import { ToastProvider, reportError } from './components/Toast'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { Guard } from './components/Layouts'
 import Login from './pages/Login'
 import BrokerPolicies from './pages/broker/Policies'
@@ -11,11 +13,17 @@ import Integrations from './pages/broker/Integrations'
 import PortalHome from './pages/portal/Home'
 import PortalPolicy from './pages/portal/Policy'
 
-const qc = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
+// Every failed query or mutation is reported as a toast, wherever it was triggered.
+const qc = new QueryClient({
+  queryCache: new QueryCache({ onError: reportError }),
+  mutationCache: new MutationCache({ onError: reportError }),
+  defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
 
 export default function App() {
   return (
     <QueryClientProvider client={qc}>
+      <ToastProvider>
+      <ErrorBoundary>
       <AuthProvider>
         <BrowserRouter>
           <Routes>
@@ -35,6 +43,8 @@ export default function App() {
           </Routes>
         </BrowserRouter>
       </AuthProvider>
+      </ErrorBoundary>
+      </ToastProvider>
     </QueryClientProvider>
   )
 }

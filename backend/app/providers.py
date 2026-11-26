@@ -27,12 +27,22 @@ class PaymentIntentResult:
     client_secret: str | None = None
 
 
+@dataclass
+class PaymentState:
+    state: str  # pending | succeeded | failed | canceled
+    failure_reason: str | None = None
+
+
 class PaymentProvider(Protocol):
     name: str
 
     def create_payment(
         self, amount_cents: int, description: str, metadata: dict[str, str]
     ) -> PaymentIntentResult: ...
+
+    def client_secret_for(self, payment_ref: str) -> str | None: ...
+
+    def payment_state(self, payment_ref: str) -> PaymentState: ...
 
     def refund(self, payment_ref: str, amount_cents: int, idempotency_key: str) -> str: ...
 
@@ -46,6 +56,12 @@ class FakeProvider:
 
     def create_payment(self, amount_cents, description, metadata) -> PaymentIntentResult:
         return PaymentIntentResult(ref=f"pi_sim_{uuid.uuid4().hex[:16]}")
+
+    def client_secret_for(self, payment_ref) -> str | None:
+        return None  # simulated payments have no browser-side card form
+
+    def payment_state(self, payment_ref) -> PaymentState:
+        return PaymentState("pending")  # simulated payments resolve only via /simulate
 
     def refund(self, payment_ref, amount_cents, idempotency_key) -> str:
         return f"re_sim_{uuid.uuid4().hex[:16]}"
@@ -76,6 +92,28 @@ class StripeProvider:
         except self._stripe.StripeError as exc:  # pragma: no cover - network
             raise ProviderError(str(exc)) from exc
         return PaymentIntentResult(ref=pi.id, client_secret=pi.client_secret)
+
+    def client_secret_for(self, payment_ref) -> str | None:
+        """The secret is not stored by us; re-fetch it so a reused attempt can still show the card form."""
+        try:
+            return self._stripe.PaymentIntent.retrieve(payment_ref).client_secret
+        except self._stripe.StripeError as exc:  # pragma: no cover - network
+            raise ProviderError(str(exc)) from exc
+
+    def payment_state(self, payment_ref) -> PaymentState:
+        """Ask Stripe what actually happened to this PaymentIntent (used when a webhook is late or lost)."""
+        try:
+            pi = self._stripe.PaymentIntent.retrieve(payment_ref)
+        except self._stripe.StripeError as exc:  # pragma: no cover - network
+            raise ProviderError(str(exc)) from exc
+        if pi.status == "succeeded":
+            return PaymentState("succeeded")
+        if pi.status == "canceled":
+            return PaymentState("canceled")
+        err = getattr(pi, "last_payment_error", None)
+        if pi.status == "requires_payment_method" and err:
+            return PaymentState("failed", getattr(err, "message", None) or "Card declined")
+        return PaymentState("pending")  # not yet submitted, or still processing
 
     def refund(self, payment_ref, amount_cents, idempotency_key) -> str:
         try:
