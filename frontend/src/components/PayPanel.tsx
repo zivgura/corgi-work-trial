@@ -34,7 +34,6 @@ export function PayPanel({ policyId, amountDue, onChanged }: { policyId: number;
         {!started && <Button onClick={start} disabled={busy}><Icon name="credit_card" /> Pay {usd(amountDue)}</Button>}
       </div>
       <div className="mt-3"><ErrorNote error={error} /></div>
-      {result?.status === 'succeeded' && <div className="mt-3 flex items-center gap-2 text-ok"><Icon name="check_circle" /> Payment successful. Thank you.</div>}
       {result?.status === 'failed' && <div className="mt-3 flex items-center gap-2 text-danger"><Icon name="error" /> Payment failed: {(result.failure_reason ?? '').replace(/\.$/, '')}. You can try again.</div>}
       {started && (
         <div className="mt-4 border-t border-line pt-4">
