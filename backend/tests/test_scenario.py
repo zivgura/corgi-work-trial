@@ -367,3 +367,27 @@ def test_emails_are_logged_for_each_step(db, customer):
     pay_in_full(db, p)
     templates = [e.template for e in db.scalars(select(EmailLog).order_by(EmailLog.id))]
     assert templates == ["policy_issued", "payment_received"]
+
+
+def test_emails_carry_a_branded_html_version(db, customer):
+    from app.email_html import render_email_html
+    from app.providers import EmailResult, set_email_provider
+
+    sent: list[dict] = []
+
+    class Capture:
+        name = "capture"
+
+        def send(self, to, subject, body, html=None):
+            sent.append({"to": to, "subject": subject, "body": body, "html": html})
+            return EmailResult(status="logged")
+
+    set_email_provider(Capture())
+    p = issue(db, customer)
+    assert sent and sent[0]["html"]
+    html = sent[0]["html"]
+    assert p.number in html and "#ff5c00" in html and "Open your portal" in html
+    assert f"/portal/policies/{p.id}" in html and "— Corgi (demo)" not in html
+    # untrusted text is escaped
+    out = render_email_html("payment_failed", "x", "<script>alert(1)</script>", "http://x")
+    assert "<script>" not in out and "&lt;script&gt;" in out

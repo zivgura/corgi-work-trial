@@ -156,13 +156,13 @@ class EmailResult:
 class EmailProvider(Protocol):
     name: str
 
-    def send(self, to: str, subject: str, body: str) -> EmailResult: ...
+    def send(self, to: str, subject: str, body: str, html: str | None = None) -> EmailResult: ...
 
 
 class FakeEmail:
     name = "fake"
 
-    def send(self, to, subject, body) -> EmailResult:
+    def send(self, to, subject, body, html=None) -> EmailResult:
         return EmailResult(status="logged")
 
 
@@ -173,12 +173,18 @@ class ResendEmail:
         self.key = settings.resend_api_key
         self.sender = settings.email_from
 
-    def send(self, to, subject, body) -> EmailResult:  # pragma: no cover - network
+    def send(self, to, subject, body, html=None) -> EmailResult:  # pragma: no cover - network
         try:
             r = httpx.post(
                 "https://api.resend.com/emails",
                 headers={"Authorization": f"Bearer {self.key}"},
-                json={"from": self.sender, "to": [to], "subject": subject, "text": body},
+                json={
+                    "from": self.sender,
+                    "to": [to],
+                    "subject": subject,
+                    "text": body,
+                    **({"html": html} if html else {}),
+                },
                 timeout=10,
             )
             if r.status_code >= 300:

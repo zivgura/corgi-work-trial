@@ -12,6 +12,8 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from . import pricing
+from .config import get_settings
+from .email_html import render_email_html
 from .models import (
     Action,
     Coverage,
@@ -233,7 +235,10 @@ def _d(iso: str) -> str:
 
 def notify(db: Session, policy: Policy | None, to: str, template: str, subject: str, body: str):
     prov = get_email_provider()
-    res = prov.send(to, subject, body)
+    portal = get_settings().app_url.rstrip("/") + (
+        f"/portal/policies/{policy.id}" if policy else "/portal"
+    )
+    res = prov.send(to, subject, body, render_email_html(template, subject, body, portal))
     db.add(
         EmailLog(
             policy_id=policy.id if policy else None,

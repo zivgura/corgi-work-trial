@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     email_from: str = "Corgi Demo <onboarding@resend.dev>"
 
+    # where the "Open your portal" button in emails points
+    app_url: str = "http://localhost:5173"
     cors_origins: str = "http://localhost:5173"
     seed_demo_data: bool = True
 
