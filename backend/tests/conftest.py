@@ -1,3 +1,4 @@
+import os
 from datetime import date
 
 import pytest
@@ -13,7 +14,8 @@ BROKER = Actor("Bea Broker", "broker")
 
 @pytest.fixture()
 def db():
-    engine = dbmod.make_engine("sqlite://")
+    engine = dbmod.make_engine(os.environ.get("TEST_DATABASE_URL", "sqlite://"))
+    dbmod.Base.metadata.drop_all(engine)
     dbmod.Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     set_payment_provider(FakeProvider())

@@ -1,0 +1,29 @@
+# Render blueprint: one Docker web service + one Postgres. Fill the `sync: false` secrets in the dashboard.
+services:
+  - type: web
+    name: corgi-policy-admin
+    runtime: docker
+    plan: starter            # free plans sleep and would miss Stripe webhooks
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: corgi-db, property: connectionString }
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://corgi-policy-admin.onrender.com
+      - key: PAYMENT_PROVIDER
+        value: stripe        # set to "fake" to run fully simulated
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: EMAIL_PROVIDER
+        value: resend        # set to "fake" to log only
+      - key: RESEND_API_KEY
+        sync: false
+databases:
+  - name: corgi-db
+    plan: basic-256mb

@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
@@ -11,7 +13,8 @@ from app.seed import BROKER_EMAIL, BROKER_PASSWORD, CUSTOMER_EMAIL, CUSTOMER_PAS
 
 @pytest.fixture()
 def client():
-    engine = dbmod.make_engine("sqlite://")
+    engine = dbmod.make_engine(os.environ.get("TEST_DATABASE_URL", "sqlite://"))
+    dbmod.Base.metadata.drop_all(engine)
     dbmod.Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     with Session() as s:

@@ -18,6 +18,10 @@ class Base(DeclarativeBase):
 
 
 def make_engine(url: str):
+    # Hosts like Render/Heroku hand out "postgres://"; SQLAlchemy + psycopg3 wants this form.
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            url = "postgresql+psycopg://" + url[len(prefix) :]
     if url.startswith("sqlite"):
         kwargs: dict = {"connect_args": {"check_same_thread": False}}
         if ":memory:" in url or url == "sqlite://":

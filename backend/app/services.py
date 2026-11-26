@@ -177,7 +177,12 @@ def _describe(type_: str, cov: Coverage, delta: int, action: Action, calc: dict)
         return f"Premium: {name}"
     if type_ == "CREDIT":
         return f"Cancellation credit: {name}"
-    return f"Adjustment: {name} ({action.summary})"
+    if calc.get("previous_effective_date") and calc.get("new_effective_date"):
+        return (
+            f"Correction: {name} start date "
+            f"{_d(calc['previous_effective_date'])} → {_d(calc['new_effective_date'])}"
+        )
+    return f"Adjustment: {name}"
 
 
 def explain(entry: LedgerEntry) -> str:
@@ -625,7 +630,7 @@ def apply_provider_event(db: Session, ev: ProviderEvent) -> str:
             action,
             "PAYMENT",
             -pay.amount_cents,
-            f"Payment received ({pay.provider}:{pay.provider_ref})",
+            "Payment received",
             {"provider_ref": pay.provider_ref, "provider": pay.provider},
             payment=pay,
         )
@@ -722,7 +727,7 @@ def issue_refund(
                 action,
                 "REFUND",
                 take,
-                f"Refund to original payment ({pay.provider}:{pay.provider_ref})",
+                "Refund to original payment method",
                 {"provider_ref": r.provider_ref, "payment_ref": pay.provider_ref},
                 payment=pay,
                 refund=r,
