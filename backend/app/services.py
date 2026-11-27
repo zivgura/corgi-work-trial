@@ -811,7 +811,9 @@ def issue_refund(
         db.add(r)
         db.flush()
         try:
-            r.provider_ref = provider.refund(pay.provider_ref, take, f"refund-{r.id}")
+            r.provider_ref = provider.refund(
+                pay.provider_ref, take, f"refund-{pay.provider_ref}-{r.id}"
+            )
             r.status = "succeeded"
             pay.refunded_cents += take
             _entry(
