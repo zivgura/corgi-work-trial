@@ -2,6 +2,7 @@
 
 A small platform where **brokers** issue and manage commercial insurance policies and **policyholders** follow their coverage, payments and refunds, with every dollar traceable to the action that caused it.
 
+- **Live app: https://corgi-policy-admin-tihx.onrender.com** (Render free tier: if it has been idle, the first request can take ~50 seconds to wake up)
 - Track: **1 · Policy administration**
 - Decision log: [`docs/DECISIONS.md`](docs/DECISIONS.md) · Integrations (live vs simulated): [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md)
 - Stack: React + TypeScript + Vite + Tailwind · FastAPI + SQLAlchemy · Postgres (SQLite for local dev) · Stripe + Resend sandboxes · pytest + Playwright
